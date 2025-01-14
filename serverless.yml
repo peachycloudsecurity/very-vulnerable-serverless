@@ -8,7 +8,7 @@ custom:
 
 provider:
   name: aws
-  runtime: python3.8
+  runtime: python3.9
   region: us-west-2
   environment:
     VARIABLE_1: supersecret99
