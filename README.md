@@ -30,7 +30,7 @@
 | # | Vulnerability | Endpoint | Status |
 |---|--------------|----------|--------|
 | SLS-1 | Injection (XSS + Command Injection) | `/welcome/<name>`, `/login`, `/date` | ✅ |
-| SLS-2 | Broken Authentication | N/A (hardcoded secret key) | ✅ |
+| SLS-2 | Broken Authentication | `/token`, `/verify` (JWT None attack) | ✅ |
 | SLS-3 | Sensitive Data Exposure / SSRF | `/redirect?url=` | ✅ |
 | SLS-4 | Insecure Deserialization | `/deserial` | ✅ |
 | SLS-5 | Broken Access Control | IAM `s3:*` on `*` | ✅ |
@@ -52,6 +52,8 @@
 | GET | `/redirect?url=` | SSRF / Lambda runtime access |
 | GET | `/date?exec=` | OS Command Injection |
 | GET | `/redos?string=` | ReDoS |
+| GET, POST | `/token` | JWT token generation (blocks admin) |
+| GET, POST | `/verify` | JWT verification (signature not checked) |
 | POST | `/deserial` | Insecure Deserialization (pickle RCE) |
 
 ---

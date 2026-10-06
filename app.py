@@ -6,6 +6,7 @@ import datetime as date
 import re
 import pickle
 import base64
+import jwt
 
 app = Flask(__name__)
 app.secret_key = 'ThisisSuperFlagBySecurityDojo'
@@ -86,7 +87,33 @@ def redos():
         return f"Error Occurred: {e}"
 
 
-# SLS-2: Insecure Deserialization
+# SLS-2: Broken Authentication — JWT signature verification disabled
+# /token generates HS256 JWT for any user except admin
+# /verify decodes without checking signature — accepts forged tokens
+@app.route('/token', methods=['GET', 'POST'])
+def gen_token():
+    if request.method == 'GET':
+        return '<html><body><h2>Generate Token</h2><form method="POST"><input name="username" placeholder="Enter username" /><button type="submit">Generate</button></form></body></html>'
+    username = request.form.get('username', '')
+    if username.lower() == 'admin':
+        return jsonify({'error': 'Admin token generation is restricted'}), 403
+    token = jwt.encode({'username': username, 'role': 'user'}, app.secret_key, algorithm='HS256')
+    return jsonify({'token': token})
+
+
+@app.route('/verify', methods=['GET', 'POST'])
+def verify_token():
+    if request.method == 'GET':
+        return '<html><body><h2>Verify Token</h2><form method="POST"><input name="token" placeholder="Paste JWT token" style="width:400px" /><button type="submit">Verify</button></form></body></html>'
+    token = request.form.get('token', '')
+    try:
+        decoded = jwt.decode(token, options={"verify_signature": False}, algorithms=["HS256", "none"])
+        return jsonify({'valid': True, 'claims': decoded})
+    except Exception as e:
+        return jsonify({'valid': False, 'error': str(e)}), 401
+
+
+# SLS-4: Insecure Deserialization
 # Unpickles arbitrary user-supplied data — leads to RCE
 # Reference: https://github.com/CalfCrusher/Python-Pickle-RCE-Exploit
 @app.route('/deserial', methods=['POST'])
