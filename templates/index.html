@@ -1,20 +1,41 @@
-<html>
-   <body style="background-color:LightGray;">
-      <center>
-      <h3 style="background-color:DodgerBlue;">VERY VULNERABLE SERVERLESS APPLICATION</h3>
-      <h3>This application is still in beta, developers left the organisation due to financial crunch. Few endpoints are still in development.</h3>
-      <h3>As a security engineer find the endpoints and retrieve the flag</h3>
-      
-       <h3>Enter your name below to get started.</h3>
-      <form action = "/dev\/login" method = "post">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Very Vulnerable Serverless Application</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .container { max-width: 600px; width: 100%; padding: 2rem; }
+        h1 { color: #e94560; font-size: 1.8rem; margin-bottom: 0.5rem; }
+        .subtitle { color: #888; margin-bottom: 2rem; }
+        .card { background: #16213e; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #0f3460; }
+        .card h3 { color: #e94560; margin-bottom: 0.5rem; font-size: 1rem; }
+        .card p { color: #aaa; font-size: 0.9rem; }
+        form { display: flex; gap: 0.5rem; margin-top: 1.5rem; }
+        input[type="text"] { flex: 1; padding: 0.6rem 1rem; border: 1px solid #0f3460; border-radius: 4px; background: #0f3460; color: #eee; font-size: 1rem; }
+        button { padding: 0.6rem 1.5rem; background: #e94560; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+        button:hover { background: #c73650; }
+        .hint { color: #555; font-size: 0.8rem; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Very Vulnerable Serverless</h1>
+        <p class="subtitle">Security training lab &mdash; find the vulnerabilities and retrieve the flag.</p>
 
+        <div class="card">
+            <h3>OWASP Serverless Top 10</h3>
+            <p>This application contains intentional vulnerabilities mapped to the OWASP Serverless Top 10. Several endpoints are hidden &mdash; discover them.</p>
+        </div>
 
-<p>Enter Name:</p>
-<p><input type = "text" name = "name" /></p>
-<p><input type = "submit" value = "submit" /></p>
+        <form action="login" method="post">
+            <input type="text" name="name" placeholder="Enter your name to get started" required>
+            <button type="submit">Go</button>
+        </form>
 
-
-      </form>
-      </center>
-   </body>
+        <p class="hint">Developers left the organisation. Some endpoints are still in development.</p>
+    </div>
+</body>
 </html>

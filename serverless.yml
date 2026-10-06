@@ -1,50 +1,43 @@
-service: my-s3-service
+service: very-vulnerable-serverless
+
+provider:
+  name: aws
+  runtime: python3.12
+  architecture: arm64
+  region: us-east-1
+  stage: dev
+  environment:
+    VARIABLE_1: supersecret99
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - s3:*
+          Resource: "*"
 
 custom:
   wsgi:
     app: app.app
-    packRequirements: false  
-  bucketName: myrandombucket
-
-provider:
-  name: aws
-  runtime: python3.8
-  region: us-west-2
-  environment:
-    VARIABLE_1: supersecret99
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - s3:*
-      Resource:
-        - "*"
+  pythonRequirements:
+    usePipenv: false
 
 package:
   individually: true
-  include:
-    - app.py
-    - requirements.txt
-  exclude:
-    - venv/**
-    - node_modules/**
+  patterns:
+    - "!venv/**"
+    - "!node_modules/**"
+    - "!.git/**"
+    - "app.py"
+    - "requirements.txt"
+    - "templates/**"
+
 plugins:
-  - serverless-s3-deploy
   - serverless-python-requirements
   - serverless-wsgi
 
-resources:
-  Resources:
-    MyBucket:
-      Type: AWS::S3::Bucket
-      Properties:
-        BucketName: ${self:custom.bucketName}    
-        AccessControl: Private
 functions:
   app:
-    handler: wsgi.handler
+    handler: wsgi_handler.handler
     events:
-      - http: ANY /
-      - http: 'ANY /{proxy+}'
-
-
-
+      - httpApi: "*"
