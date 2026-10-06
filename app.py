@@ -20,7 +20,7 @@ def index():
 # User input directly interpolated into response without sanitization
 @app.route('/welcome/<name>')
 def success(name):
-    return 'welcome %s' % name
+    return "<html><body><h2>welcome %s</h2></body></html>" % name
 
 
 # SLS-1: Injection Vulnerability
@@ -37,7 +37,7 @@ def login():
 
 # SLS-3: SSRF / Lambda Runtime Invocation
 # Fetches arbitrary URLs including internal Lambda runtime API
-# Try: /redirect?url=http://127.0.0.1:9001/2018-06-01/runtime/invocation/next
+# Try: /redirect?url=http://169.254.100.1:9001/2018-06-01/runtime/invocation/next
 @app.route('/redirect')
 def web():
     try:
