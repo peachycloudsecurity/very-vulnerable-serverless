@@ -18,7 +18,7 @@ def index():
 
 # SLS-1: Injection Vulnerability
 # User input directly interpolated into response without sanitization
-@app.route('/welcome/<name>')
+@app.route('/welcome/<path:name>')
 def success(name):
     return "<html><body><h2>welcome %s</h2></body></html>" % name
 
