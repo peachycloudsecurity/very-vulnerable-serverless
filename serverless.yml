@@ -26,8 +26,14 @@ package:
   individually: true
   patterns:
     - "!venv/**"
+    - "!.venv/**"
     - "!node_modules/**"
     - "!.git/**"
+    # The AWS CLI installer unzipped in the lab folder pushes the function past
+    # Lambda's 250 MB unzipped limit.
+    - "!aws/**"
+    - "!awscliv2.zip"
+    - "!.serverless/**"
     - "app.py"
     - "requirements.txt"
     - "templates/**"
